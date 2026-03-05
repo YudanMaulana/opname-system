@@ -1,0 +1,60 @@
+name: opname_merchandise
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  firebase_core: ^4.5.0
+  firebase_auth: ^6.1.4
+  google_sign_in: ^7.2.0
+  gsheets: ^0.5.0
+  mobile_scanner: ^5.2.0 # Versi stabil terbaru
+  http: ^1.1.0
+  flutter_native_splash: ^2.4.7
+  cloud_firestore: ^6.1.3
+  path_provider: ^2.1.5
+  csv: ^7.1.0
+  share_plus: ^12.0.1
+  intl: ^0.20.2
+  permission_handler: ^12.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  # Package untuk generate icon dan splash screen
+  flutter_launcher_icons: ^0.13.1
+
+# --- KONFIGURASI LAUNCHER ICONS ---
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "images/icon.png"
+  min_sdk_android: 21 
+  adaptive_icon_background: "#3F372F" # Warna cokelat background aplikasi Anda
+  adaptive_icon_foreground: "images/icon.png"
+
+# --- KONFIGURASI NATIVE SPLASH ---
+flutter_native_splash:
+  color: "#3F372F" # Warna background splash
+  image: "images/icon.png"
+  branding: "images/logo.png" # Opsional: menampilkan logo di bawah icon saat loading
+  android_12:
+    image: "images/icon.png"
+    color: "#3F372F"
+  fullscreen: true
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - images/logo.png
+    - images/icon.png # Pastikan icon.png ada di folder images

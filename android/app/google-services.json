@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "939943950889",
+    "project_id": "opname-merchandise",
+    "storage_bucket": "opname-merchandise.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:939943950889:android:75f3ce47bd00aeb6befa38",
+        "android_client_info": {
+          "package_name": "com.example.opname_merchandise"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC9YRNDLnlLkjGFveo-a7VFQtFmIMkJFJY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
