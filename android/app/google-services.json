@@ -12,7 +12,12 @@
           "package_name": "com.example.opname_merchandise"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "939943950889-hst9odjtm3r7rd58ak2g23g8nim22cks.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyC9YRNDLnlLkjGFveo-a7VFQtFmIMkJFJY"
@@ -20,7 +25,55 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "939943950889-hst9odjtm3r7rd58ak2g23g8nim22cks.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "939943950889-ve4a06brh70sb81hcrl0fvtmk5hstdul.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.opnameMerchandise"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:939943950889:android:aa1947318439df11befa38",
+        "android_client_info": {
+          "package_name": "com.merchandise.opname"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "939943950889-hst9odjtm3r7rd58ak2g23g8nim22cks.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC9YRNDLnlLkjGFveo-a7VFQtFmIMkJFJY"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "939943950889-hst9odjtm3r7rd58ak2g23g8nim22cks.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "939943950889-ve4a06brh70sb81hcrl0fvtmk5hstdul.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.opnameMerchandise"
+              }
+            }
+          ]
         }
       }
     }

@@ -1,4 +1,4 @@
-package com.example.opname_merchandise
+package com.merchandise.opname
 
 import io.flutter.embedding.android.FlutterActivity
 

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'home.dart';
 
 class LoginPage extends StatefulWidget {
@@ -10,127 +11,125 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _emailController = TextEditingController();
-  final _passwordController = TextEditingController();
   bool _isLoading = false;
 
-  Future<void> _handleLogin() async {
-  if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
-    _showSnackBar("Email dan Password tidak boleh kosong", Colors.orange);
-    return;
-  }
+  // FIX: Deklarasikan GoogleSignIn di luar fungsi untuk stabilitas
+  final GoogleSignIn _googleSignIn = GoogleSignIn();
 
-  setState(() => _isLoading = true);
-
-  try {
-    await FirebaseAuth.instance.signInWithEmailAndPassword(
-      email: _emailController.text.trim(),
-      password: _passwordController.text.trim(),
-    );
+  Future<void> _handleGoogleSignIn() async {
+    setState(() => _isLoading = true);
     
-    _showSnackBar("Login Berhasil!", Colors.green);
+    try {
+      // 1. Pastikan sudah logout dari sesi sebelumnya (mencegah error cache)
+      await _googleSignIn.signOut();
 
-    // PINDAH KE HALAMAN HOME
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const HomePage()),
+      // 2. Inisiasi proses login Google
+      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+
+      if (googleUser == null) {
+        setState(() => _isLoading = false);
+        return;
+      }
+
+      // 3. Ambil detail autentikasi
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+
+      // 4. Buat kredensial Firebase
+      final AuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
       );
+
+      // 5. Masuk ke Firebase
+      await FirebaseAuth.instance.signInWithCredential(credential);
+
+      if (mounted) {
+        _showSnackBar("Selamat Datang, ${googleUser.displayName}!", Colors.green);
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const HomePage()),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      // DEBUG: Cetak error ke console untuk melihat detail asli
+      print("ERROR GOOGLE SIGNIN: $e");
+      _showSnackBar("Gagal Login Google: $e", Colors.redAccent);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
-    
-  } on FirebaseAuthException catch (e) {
-    String message = "Terjadi kesalahan";
-    if (e.code == 'user-not-found' || e.code == 'invalid-credential') {
-      message = "Email atau Password salah.";
-    } else if (e.code == 'invalid-email') {
-      message = "Format email salah.";
-    }
-    _showSnackBar(message, Colors.redAccent);
-  } finally {
-    if (mounted) setState(() => _isLoading = false);
   }
-}
 
   void _showSnackBar(String message, Color color) {
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: color),
+      SnackBar(content: Text(message), backgroundColor: color, behavior: SnackBarBehavior.floating),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    // UI TETAP SAMA SEPERTI SEBELUMNYA
     return Scaffold(
       backgroundColor: const Color(0xFF3F372F),
       body: Column(
         children: [
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 30),
-              child: Column(
-                children: [
-                  const SizedBox(height: 80),
-                  
-                  // Logo
-                  Image.asset(
-                    'images/logo.png', // Pastikan path ini sesuai dengan pubspec.yaml
-                    height: 120,
-                    fit: BoxFit.contain,
-                    errorBuilder: (context, error, stackTrace) {
-                      return const Icon(Icons.inventory_2_outlined, size: 80, color: Color(0xFFC3A11D));
-                    },
-                  ),
-                  const Text(
-                    "LOGIN",
-                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 24),
-                  ),
-                  const Text(
-                    "STOCK CHECK MERCHANDISE STORE",
-                    style: TextStyle(color: Colors.white, fontStyle: FontStyle.italic, fontSize: 14),
-                  ),
-                  const SizedBox(height: 40),
-                  
-                  _buildTextField(
-                    controller: _emailController,
-                    label: "Email", 
-                    icon: Icons.email,
-                    keyboardType: TextInputType.emailAddress,
-                  ),
-                  const SizedBox(height: 20),
-                  
-                  _buildTextField(
-                    controller: _passwordController, 
-                    label: "Password", 
-                    icon: Icons.lock, 
-                    isObscure: true
-                  ),
-                  const SizedBox(height: 30),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center, 
+              children: [
+                Image.asset(
+                  'images/logo.png',
+                  height: 150,
+                  errorBuilder: (context, error, stackTrace) => 
+                    const Icon(Icons.inventory_2_outlined, size: 100, color: Color(0xFFC3A11D)),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  "STOCK CHECK",
+                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 28),
+                ),
+                const Text(
+                  "MERCHANDISE STORE",
+                  style: TextStyle(color: Colors.white70, fontStyle: FontStyle.italic, fontSize: 16),
+                ),
+                const SizedBox(height: 60),
 
-                  SizedBox(
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 40),
+                  child: SizedBox(
                     width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFC3A11D),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      onPressed: _isLoading ? null : _handleLogin,
-                      child: _isLoading 
-                        ? const SizedBox(
-                            height: 20, 
-                            width: 20, 
-                            child: CircularProgressIndicator(color: Color(0xFF3F372F), strokeWidth: 2)
-                          )
-                        : const Text(
-                            "SIGN IN", 
-                            style: TextStyle(color: Color(0xFF3F372F), fontWeight: FontWeight.bold)
+                    height: 55,
+                    child: ElevatedButton.icon(
+                      icon: _isLoading 
+                        ? const SizedBox.shrink() 
+                        : Image.network(
+                            'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/1200px-Google_%22G%22_logo.svg.png',
+                            height: 24,
+                            errorBuilder: (context, error, stackTrace) => const Icon(Icons.login, color: Colors.grey),
                           ),
+                      label: _isLoading 
+                        ? const CircularProgressIndicator(color: Color(0xFF3F372F))
+                        : const Text(
+                            "SIGN IN WITH GOOGLE",
+                            style: TextStyle(
+                              color: Color(0xFF3F372F), 
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        elevation: 5,
+                      ),
+                      onPressed: _isLoading ? null : _handleGoogleSignIn,
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
-          
           const Padding(
             padding: EdgeInsets.only(bottom: 20),
             child: Text(
@@ -139,29 +138,6 @@ class _LoginPageState extends State<LoginPage> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildTextField({
-    required TextEditingController controller, 
-    required String label, 
-    required IconData icon, 
-    bool isObscure = false,
-    TextInputType keyboardType = TextInputType.text,
-  }) {
-    return TextField(
-      controller: controller,
-      obscureText: isObscure,
-      keyboardType: keyboardType,
-      cursorColor: Colors.white, // MEMBUAT KURSOR JADI PUTIH
-      style: const TextStyle(color: Colors.white),
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: const TextStyle(color: Color(0xFFC3A11D)),
-        prefixIcon: Icon(icon, color: const Color(0xFFC3A11D)),
-        enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Color(0xFFC3A11D))),
-        focusedBorder: const OutlineInputBorder(borderSide: BorderSide(color: Color(0xFFC3A11D))),
       ),
     );
   }

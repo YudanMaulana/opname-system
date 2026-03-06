@@ -11,12 +11,12 @@ import 'package:share_plus/share_plus.dart';
 import 'scanner_page.dart'; 
 import 'tambah_barang.dart';
 import 'preview_page.dart'; 
-import 'login_page.dart'; // PASTIKAN FILE INI SUDAH ADA
+import 'login_page.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
-  // --- 1. FUNGSI LOGOUT (DIPERBARUI DENGAN NAVIGASI KE LOGIN) ---
+  // --- 1. FUNGSI LOGOUT ---
   void _handleLogout(BuildContext context) {
     showDialog(
       context: context,
@@ -65,14 +65,9 @@ class HomePage extends StatelessWidget {
                   Expanded(
                     child: ElevatedButton(
                       onPressed: () async {
-                        // 1. Proses Sign Out dari Firebase
                         await FirebaseAuth.instance.signOut();
-                        
                         if (context.mounted) {
-                          // 2. Tampilkan SnackBar
                           _showSnackBar(context, "Berhasil keluar", Colors.orange);
-                          
-                          // 3. Navigasi Paksa ke LoginPage dan hapus semua history page
                           Navigator.pushAndRemoveUntil(
                             context, 
                             MaterialPageRoute(builder: (context) => const LoginPage()), 
@@ -161,11 +156,9 @@ class HomePage extends StatelessWidget {
 
       if (context.mounted) {
         _showSnackBar(context, "Tersimpan di: ${file.path}", Colors.green);
-        // ignore: deprecated_member_use
         await Share.shareXFiles([XFile(file.path)], text: 'Laporan Opname');
       }
     } catch (e) {
-      // ignore: use_build_context_synchronously
       _showSnackBar(context, "Error: $e", Colors.red);
     }
   }
@@ -214,8 +207,22 @@ class HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // --- LOGIKA HEADER NAMA (TANPA @GMAIL.COM) ---
     final User? user = FirebaseAuth.instance.currentUser;
-    final String userDisplayName = user?.email ?? "User";
+    String userDisplayName = "User";
+
+    if (user != null) {
+      // Prioritaskan Nama dari Profil Google (Display Name)
+      if (user.displayName != null && user.displayName!.isNotEmpty) {
+        userDisplayName = user.displayName!;
+      } 
+      // Jika Display Name tidak ada, baru gunakan Email (dipotong @-nya)
+      else if (user.email != null) {
+        String rawName = user.email!.split('@')[0];
+        // Bonus: Membuat huruf pertama Kapital agar rapi
+        userDisplayName = rawName[0].toUpperCase() + rawName.substring(1);
+      }
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFF3F372F),
