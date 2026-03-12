@@ -25,6 +25,8 @@ dependencies:
   share_plus: ^12.0.1
   intl: ^0.20.2
   permission_handler: ^12.0.1
+  shorebird_code_push: ^2.0.5
+  barcode_widget: ^2.0.4
 
 dev_dependencies:
   flutter_test:
@@ -57,4 +59,5 @@ flutter:
 
   assets:
     - images/logo.png
-    - images/icon.png # Pastikan icon.png ada di folder images
+    - images/icon.png
+    - shorebird.yaml # Pastikan icon.png ada di folder images

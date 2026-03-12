@@ -1,23 +1,63 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Tambahkan import ini
-import 'login_page.dart';
-import 'home.dart'; // Pastikan import HomePage ada di sini
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shorebird_code_push/shorebird_code_push.dart'; // Import shorebird
+import 'firebase_options.dart'; 
+import 'home.dart';
+import 'login_page.dart'; 
+import 'windows_page.dart'; 
+
+// Inisialisasi Shorebird Updater sesuai referensi kode kamu
+final _shorebirdUpdater = ShorebirdUpdater();
 
 void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+  // Wajib untuk inisialisasi plugin native
+  WidgetsFlutterBinding.ensureInitialized(); 
+
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
+  
   runApp(const OpnameApp());
 }
 
-class OpnameApp extends StatelessWidget {
+class OpnameApp extends StatefulWidget {
   const OpnameApp({super.key});
+
+  @override
+  State<OpnameApp> createState() => _OpnameAppState();
+}
+
+class _OpnameAppState extends State<OpnameApp> {
+
+  @override
+  void initState() {
+    super.initState();
+    // Jalankan pengecekan update otomatis saat app terbuka (hanya mobile)
+    if (!Platform.isWindows) {
+      _checkForUpdates();
+    }
+  }
+
+  // Logika cek update Shorebird yang aman
+  Future<void> _checkForUpdates() async {
+    try {
+      final status = await _shorebirdUpdater.checkForUpdate();
+      if (status == UpdateStatus.outdated) {
+        await _shorebirdUpdater.update();
+        // Update akan aktif saat aplikasi di-restart berikutnya
+      }
+    } catch (e) {
+      debugPrint("Shorebird Error: $e");
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Opname Merchandise',
+      title: 'Opname System Admin X-Quest', 
       theme: ThemeData(
         primarySwatch: Colors.amber,
         textSelectionTheme: const TextSelectionThemeData(
@@ -26,29 +66,35 @@ class OpnameApp extends StatelessWidget {
           selectionHandleColor: Colors.white,
         ),
       ),
-      // --- LOGIKA PENYIMPANAN SESI (PERSISTENCE) ---
-      home: StreamBuilder<User?>(
-        stream: FirebaseAuth.instance.authStateChanges(),
-        builder: (context, snapshot) {
-          // 1. Jika aplikasi sedang mengecek status (loading)
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(
-              backgroundColor: Color(0xFF3F372F),
-              body: Center(
-                child: CircularProgressIndicator(color: Color(0xFFC3A11D)),
-              ),
-            );
-          }
-          
-          // 2. Jika user sudah pernah login (Sesi Aktif)
-          if (snapshot.hasData) {
-            return const HomePage();
-          }
-          
-          // 3. Jika user belum login atau sudah logout
-          return const LoginPage();
-        },
-      ),
+      home: _getInitialPage(),
+    );
+  }
+
+  Widget _getInitialPage() {
+    // Jika di Windows, langsung ke Dashboard Windows
+    if (Platform.isWindows) {
+      return const WindowsDashboard();
+    }
+
+    // Jika di Mobile, cek status Login Firebase
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+            backgroundColor: Color(0xFF3F372F),
+            body: Center(
+              child: CircularProgressIndicator(color: Color(0xFFC3A11D)),
+            ),
+          );
+        }
+        
+        if (snapshot.hasData) {
+          return const HomePage();
+        }
+        
+        return const LoginPage();
+      },
     );
   }
 }

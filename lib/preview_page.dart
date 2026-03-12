@@ -1,31 +1,31 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; // Tambahkan package intl di pubspec.yaml jika belum ada
+import 'package:intl/intl.dart';
 
 class PreviewLaporanPage extends StatelessWidget {
   final List<QueryDocumentSnapshot> logs;
   final VoidCallback onExport;
-  final VoidCallback onReset;
+  final VoidCallback onResetAll;
+  final VoidCallback onResetStock;
 
   const PreviewLaporanPage({
     super.key, 
     required this.logs, 
     required this.onExport, 
-    required this.onReset
+    required this.onResetAll,
+    required this.onResetStock,
   });
 
-  // Fungsi untuk mengelompokkan logs berdasarkan Bulan (Format: MMMM yyyy)
   Map<String, List<QueryDocumentSnapshot>> _groupLogsByMonth() {
     Map<String, List<QueryDocumentSnapshot>> grouped = {};
     for (var log in logs) {
       final data = log.data() as Map<String, dynamic>;
+      if (data['timestamp'] == null) continue;
+      
       final DateTime date = (data['timestamp'] as Timestamp).toDate();
-      final String monthKey = DateFormat('MMMM yyyy').format(date); // Contoh: "March 2026"
+      final String monthKey = DateFormat('MMMM yyyy').format(date);
 
-      if (grouped[monthKey] == null) {
-        grouped[monthKey] = [];
-      }
-      grouped[monthKey]!.add(log);
+      grouped.putIfAbsent(monthKey, () => []).add(log);
     }
     return grouped;
   }
@@ -42,18 +42,40 @@ class PreviewLaporanPage extends StatelessWidget {
           style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, letterSpacing: 1.2, color: Colors.white)),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        centerTitle: true,
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
+          TextButton.icon(
+            onPressed: () => _confirmAction(
+              context, 
+              "Reset Semua Stok?", 
+              "Semua angka stok akan menjadi 0. Data barang tidak akan dihapus.", 
+              onResetStock,
+              const Color(0xFFC3A11D),
+            ),
+            icon: const Icon(Icons.refresh_rounded, size: 16, color: Colors.orangeAccent),
+            label: const Text("RESET", 
+              style: TextStyle(color: Colors.orangeAccent, fontSize: 11, fontWeight: FontWeight.bold)),
+          ),
           IconButton(
-            icon: const Icon(Icons.delete_forever, color: Colors.redAccent),
-            onPressed: () => _confirmReset(context),
-          )
+            tooltip: "Format All Data",
+            icon: const Icon(Icons.delete_forever_rounded, color: Colors.redAccent),
+            onPressed: () => _confirmAction(
+              context, 
+              "Format All Data?", 
+              "SEMUA data master dan riwayat akan dihapus permanen.", 
+              onResetAll,
+              Colors.red,
+            ),
+          ),
+          const SizedBox(width: 8),
         ],
       ),
       body: Column(
         children: [
           Expanded(
             child: Container(
+              width: double.infinity,
               margin: const EdgeInsets.only(top: 10),
               decoration: const BoxDecoration(
                 color: Colors.white,
@@ -62,7 +84,7 @@ class PreviewLaporanPage extends StatelessWidget {
               child: logs.isEmpty
                   ? _buildEmptyState()
                   : ListView.builder(
-                      padding: const EdgeInsets.all(20),
+                      padding: const EdgeInsets.fromLTRB(20, 30, 20, 20),
                       itemCount: monthKeys.length,
                       itemBuilder: (context, index) {
                         final String month = monthKeys[index];
@@ -71,56 +93,37 @@ class PreviewLaporanPage extends StatelessWidget {
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // HEADER BULAN
-                            Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 5),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.calendar_month, size: 18, color: Color(0xFFC3A11D)),
-                                  const SizedBox(width: 8),
-                                  Text(month.toUpperCase(), 
-                                    style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.black87, fontSize: 13, letterSpacing: 1)),
-                                ],
-                              ),
-                            ),
-                            // DAFTAR LOG DI BULAN TERSEBUT
+                            _buildMonthHeader(month),
+                            const SizedBox(height: 10),
                             ...monthLogs.map((log) {
                               final data = log.data() as Map<String, dynamic>;
                               final DateTime waktu = (data['timestamp'] as Timestamp).toDate();
                               return _buildLogTile(data, waktu);
                             }),
-                            const SizedBox(height: 10),
-                            const Divider(thickness: 1, color: Color(0xFFF0F0F0)),
+                            const SizedBox(height: 20),
                           ],
                         );
                       },
                     ),
             ),
           ),
-          
-          // TOMBOL EKSPOR (UI DIPERBAIKI)
           Container(
             color: Colors.white,
-            padding: const EdgeInsets.fromLTRB(25, 10, 25, 30),
+            padding: EdgeInsets.fromLTRB(25, 10, 25, MediaQuery.of(context).padding.bottom + 20),
             child: SizedBox(
               width: double.infinity,
-              height: 60,
+              height: 55,
               child: ElevatedButton.icon(
-                onPressed: onExport,
-                icon: const Icon(Icons.share_rounded, color: Colors.black),
+                onPressed: logs.isEmpty ? null : onExport,
+                icon: const Icon(Icons.share_rounded, color: Color(0xFF3F372F), size: 20),
                 label: const Text("BAGIKAN CSV SEKARANG", 
-                  style: TextStyle(
-                    fontSize: 15, 
-                    fontWeight: FontWeight.w900, // Font lebih tebal
-                    color: Colors.black,
-                    letterSpacing: 0.5
-                  )
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Color(0xFF3F372F))
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFC3A11D),
-                  elevation: 4,
-                  shadowColor: const Color(0xFFC3A11D).withOpacity(0.4),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                  disabledBackgroundColor: Colors.grey[200],
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
                 ),
               ),
             ),
@@ -130,13 +133,75 @@ class PreviewLaporanPage extends StatelessWidget {
     );
   }
 
-  Widget _buildLogTile(Map<String, dynamic> data, DateTime waktu) {
+  Widget _buildMonthHeader(String month) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8F9FA),
-        borderRadius: BorderRadius.circular(15),
+        color: const Color(0xFFC3A11D).withOpacity(0.1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.calendar_month, size: 14, color: Color(0xFFC3A11D)),
+          const SizedBox(width: 8),
+          Text(month.toUpperCase(), 
+            style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFFC3A11D), fontSize: 11, letterSpacing: 1)),
+        ],
+      ),
+    );
+  }
+
+  void _confirmAction(BuildContext context, String title, String message, VoidCallback action, Color color) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: "",
+      pageBuilder: (context, a1, a2) => const SizedBox.shrink(),
+      transitionBuilder: (context, a1, a2, child) {
+        return Transform.scale(
+          scale: a1.value,
+          child: Opacity(
+            opacity: a1.value,
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+              title: Text(title, style: TextStyle(fontWeight: FontWeight.w900, color: color, fontSize: 18)),
+              content: Text(message, style: const TextStyle(fontSize: 14, color: Colors.black54)),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context), 
+                  child: const Text("BATAL", style: TextStyle(color: Colors.grey, fontWeight: FontWeight.bold))
+                ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: color, 
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))
+                  ),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    action();
+                  }, 
+                  child: const Text("YA, LANJUTKAN", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+    );
+  }
+
+  Widget _buildLogTile(Map<String, dynamic> data, DateTime waktu) {
+    final bool isIncrease = (data['qty_baru'] ?? 0) > (data['qty_lama'] ?? 0);
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFBFBFB),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.withOpacity(0.1)),
       ),
       child: Row(
         children: [
@@ -145,18 +210,40 @@ class PreviewLaporanPage extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(data['nama'] ?? "Tanpa Nama", 
+                  maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF3F372F))),
-                const SizedBox(height: 4),
-                Text("${data['sku']} • ${data['lokasi'].toString().replaceAll('stok_', '').toUpperCase()}", 
-                  style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500)),
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    // SKU UTAMA
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(4)),
+                      child: Text(data['sku'] ?? "-", style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold)),
+                    ),
+                    const SizedBox(width: 6),
+                    // SKU LAMA (Indikator Tambahan)
+                    Text("Lama: ${data['sku_lama'] ?? '-'}", 
+                      style: const TextStyle(fontSize: 9, color: Colors.blueGrey, fontWeight: FontWeight.w500)),
+                    const SizedBox(width: 8),
+                    Text(data['lokasi'].toString().replaceAll('stok_', '').toUpperCase(), 
+                      style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
+                  ],
+                ),
               ],
             ),
           ),
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
-              Text("${data['qty_lama']} ➔ ${data['qty_baru']}", 
-                style: const TextStyle(fontWeight: FontWeight.w900, color: Color(0xFFC3A11D), fontSize: 14)),
+              Row(
+                children: [
+                  Text("${data['qty_lama']}", style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                  const Icon(Icons.arrow_right_alt_rounded, size: 16, color: Colors.grey),
+                  Text("${data['qty_baru']}", 
+                    style: TextStyle(fontWeight: FontWeight.w900, color: isIncrease ? Colors.green : const Color(0xFFC3A11D), fontSize: 15)),
+                ],
+              ),
               const SizedBox(height: 4),
               Text(DateFormat('dd MMM, HH:mm').format(waktu), 
                 style: const TextStyle(fontSize: 10, color: Colors.grey)),
@@ -172,43 +259,13 @@ class PreviewLaporanPage extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.history_toggle_off, size: 70, color: Colors.grey[300]),
-          const SizedBox(height: 15),
-          Text("Belum ada riwayat opname", style: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
-
-  void _confirmReset(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Colors.red),
-            SizedBox(width: 10),
-            Text("HAPUS TOTAL?", style: TextStyle(fontWeight: FontWeight.bold)),
-          ],
-        ),
-        // Update pesan peringatan
-        content: const Text(
-          "Tindakan ini akan menghapus SEMUA RIWAYAT (logs) dan SEMUA MASTER BARANG (products). Aplikasi akan menjadi kosong seperti baru.",
-          style: TextStyle(fontSize: 13),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context), 
-            child: const Text("BATAL", style: TextStyle(color: Colors.grey))
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              onReset(); // Ini akan memicu fungsi di home.dart
-            }, 
-            child: const Text("YA, RESET TOTAL", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold))
-          ),
+          Icon(Icons.layers_clear_outlined, size: 80, color: Colors.grey[200]),
+          const SizedBox(height: 20),
+          Text("BELUM ADA RIWAYAT", 
+            style: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.w900, letterSpacing: 1.5, fontSize: 12)),
+          const SizedBox(height: 8),
+          Text("Lakukan update stok untuk melihat data di sini", 
+            style: TextStyle(color: Colors.grey[400], fontSize: 11)),
         ],
       ),
     );

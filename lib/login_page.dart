@@ -86,11 +86,11 @@ class _LoginPageState extends State<LoginPage> {
                 ),
                 const SizedBox(height: 20),
                 const Text(
-                  "STOCK CHECK",
+                "OPNAME SYSTEM ",
                   style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 28),
                 ),
                 const Text(
-                  "MERCHANDISE STORE",
+                  "CHOCOLATOS X-QUEST",
                   style: TextStyle(color: Colors.white70, fontStyle: FontStyle.italic, fontSize: 16),
                 ),
                 const SizedBox(height: 60),

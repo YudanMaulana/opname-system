@@ -2,15 +2,15 @@ import 'dart:io';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; 
+import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:share_plus/share_plus.dart';
 
 // --- IMPORT HALAMAN TERKAIT ---
-import 'scanner_page.dart'; 
+import 'scanner_page.dart';
 import 'tambah_barang.dart';
-import 'preview_page.dart'; 
+import 'preview_page.dart';
 import 'login_page.dart';
 
 class HomePage extends StatelessWidget {
@@ -34,12 +34,20 @@ class HomePage extends StatelessWidget {
                   color: Colors.red.withOpacity(0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 32),
+                child: const Icon(
+                  Icons.logout_rounded,
+                  color: Colors.redAccent,
+                  size: 32,
+                ),
               ),
               const SizedBox(height: 20),
               const Text(
                 "Konfirmasi Keluar",
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
               ),
               const SizedBox(height: 10),
               const Text(
@@ -56,9 +64,14 @@ class HomePage extends StatelessWidget {
                       style: OutlinedButton.styleFrom(
                         side: const BorderSide(color: Colors.white10),
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
-                      child: const Text("Batal", style: TextStyle(color: Colors.white)),
+                      child: const Text(
+                        "Batal",
+                        style: TextStyle(color: Colors.white),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -67,10 +80,16 @@ class HomePage extends StatelessWidget {
                       onPressed: () async {
                         await FirebaseAuth.instance.signOut();
                         if (context.mounted) {
-                          _showSnackBar(context, "Berhasil keluar", Colors.orange);
+                          _showSnackBar(
+                            context,
+                            "Berhasil keluar",
+                            Colors.orange,
+                          );
                           Navigator.pushAndRemoveUntil(
-                            context, 
-                            MaterialPageRoute(builder: (context) => const LoginPage()), 
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const LoginPage(),
+                            ),
                             (route) => false,
                           );
                         }
@@ -79,13 +98,18 @@ class HomePage extends StatelessWidget {
                         backgroundColor: const Color(0xFFC3A11D),
                         foregroundColor: Colors.black,
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
-                      child: const Text("Keluar", style: TextStyle(fontWeight: FontWeight.bold)),
+                      child: const Text(
+                        "Keluar",
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ),
                 ],
-              )
+              ),
             ],
           ),
         ),
@@ -109,7 +133,8 @@ class HomePage extends StatelessWidget {
           builder: (c) => PreviewLaporanPage(
             logs: snapshot.docs,
             onExport: () => _prosesEkspor(context, snapshot.docs),
-            onReset: () => _resetTotalData(context),
+            onResetAll: () => _resetTotalData(context),
+            onResetStock: () => _resetStockOnly(context),
           ),
         ),
       );
@@ -118,8 +143,11 @@ class HomePage extends StatelessWidget {
     }
   }
 
-  // --- 3. FUNGSI EKSPOR KE CSV ---
-  Future<void> _prosesEkspor(BuildContext context, List<QueryDocumentSnapshot> logs) async {
+  // --- 3. FUNGSI EKSPOR KE CSV (UPDATED) ---
+  Future<void> _prosesEkspor(
+    BuildContext context,
+    List<QueryDocumentSnapshot> logs,
+  ) async {
     try {
       if (Platform.isAndroid) {
         await Permission.storage.request();
@@ -128,14 +156,23 @@ class HomePage extends StatelessWidget {
         }
       }
 
-      String csvContent = "WAKTU,SKU,NAMA BARANG,LOKASI,STOK AWAL,STOK BARU,SELISIH\n";
+      // Header dengan kolom SKU LAMA
+      String csvContent =
+          "WAKTU,SKU BARU,SKU LAMA,NAMA BARANG,LOKASI,STOK AWAL,STOK BARU,SELISIH\n";
+
       for (var log in logs) {
         final data = log.data() as Map<String, dynamic>;
         final DateTime waktu = (data['timestamp'] as Timestamp).toDate();
-        final String formattedDate = DateFormat('yyyy-MM-dd HH:mm').format(waktu);
-        
+        final String formattedDate = DateFormat(
+          'yyyy-MM-dd HH:mm',
+        ).format(waktu);
+
         String nama = (data['nama'] ?? "-").toString().replaceAll(',', '');
-        csvContent += "$formattedDate,${data['sku']},$nama,${data['lokasi']},${data['qty_lama']},${data['qty_baru']},${(data['qty_baru']??0)-(data['qty_lama']??0)}\n";
+        String skuLama = (data['sku_lama'] ?? "-")
+            .toString(); // Menangkap data sku_lama dari Firestore
+
+        csvContent +=
+            "$formattedDate,${data['sku']},$skuLama,$nama,${data['lokasi']},${data['qty_lama']},${data['qty_baru']},${(data['qty_baru'] ?? 0) - (data['qty_lama'] ?? 0)}\n";
       }
 
       Directory? downloadDir;
@@ -149,14 +186,17 @@ class HomePage extends StatelessWidget {
         downloadDir = await getApplicationDocumentsDirectory();
       }
 
-      final String fileName = "Laporan_Opname_${DateFormat('ddMMyy_HHmm').format(DateTime.now())}.csv";
+      final String fileName =
+          "Laporan_Opname_${DateFormat('ddMMyy_HHmm').format(DateTime.now())}.csv";
       final File file = File("${downloadDir.path}/$fileName");
-      
+
       await file.writeAsString(csvContent);
 
       if (context.mounted) {
-        _showSnackBar(context, "Tersimpan di: ${file.path}", Colors.green);
-        await Share.shareXFiles([XFile(file.path)], text: 'Laporan Opname');
+        _showSnackBar(context, "Tersimpan di Download", Colors.green);
+        await Share.shareXFiles([
+          XFile(file.path),
+        ], text: 'Laporan Opname X-QUEST');
       }
     } catch (e) {
       _showSnackBar(context, "Error: $e", Colors.red);
@@ -169,23 +209,29 @@ class HomePage extends StatelessWidget {
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (c) => const Center(child: CircularProgressIndicator(color: Color(0xFFC3A11D))),
+        builder: (c) => const Center(
+          child: CircularProgressIndicator(color: Color(0xFFC3A11D)),
+        ),
       );
 
       final firestore = FirebaseFirestore.instance;
       WriteBatch batch = firestore.batch();
 
       final logsSnapshot = await firestore.collection('logs').get();
-      for (var doc in logsSnapshot.docs) { batch.delete(doc.reference); }
+      for (var doc in logsSnapshot.docs) {
+        batch.delete(doc.reference);
+      }
 
       final productsSnapshot = await firestore.collection('products').get();
-      for (var doc in productsSnapshot.docs) { batch.delete(doc.reference); }
-      
+      for (var doc in productsSnapshot.docs) {
+        batch.delete(doc.reference);
+      }
+
       await batch.commit();
-      
+
       if (!context.mounted) return;
-      Navigator.pop(context); 
-      Navigator.pop(context); 
+      Navigator.pop(context);
+      Navigator.pop(context);
 
       _showSnackBar(context, "Database Berhasil Dikosongkan!", Colors.green);
     } catch (e) {
@@ -194,32 +240,65 @@ class HomePage extends StatelessWidget {
     }
   }
 
+  // --- 5. FUNGSI RESET JUMLAH STOK ---
+  Future<void> _resetStockOnly(BuildContext context) async {
+    try {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (c) => const Center(
+          child: CircularProgressIndicator(color: Color(0xFFC3A11D)),
+        ),
+      );
+
+      final firestore = FirebaseFirestore.instance;
+      final productsSnapshot = await firestore.collection('products').get();
+
+      WriteBatch batch = firestore.batch();
+      for (var doc in productsSnapshot.docs) {
+        batch.update(doc.reference, {
+          'stok_gudang': 0,
+          'stok_display': 0,
+          'stok_atas': 0,
+          'stok_bawah': 0,
+          'last_updated': FieldValue.serverTimestamp(),
+        });
+      }
+
+      await batch.commit();
+
+      if (!context.mounted) return;
+      Navigator.pop(context);
+      Navigator.pop(context);
+
+      _showSnackBar(context, "Semua Stok jadi 0!", Colors.orange);
+    } catch (e) {
+      if (context.mounted) Navigator.pop(context);
+      _showSnackBar(context, "Gagal reset stok: $e", Colors.red);
+    }
+  }
+
   void _showSnackBar(BuildContext context, String msg, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(msg, style: const TextStyle(fontWeight: FontWeight.bold)), 
-        backgroundColor: color, 
+        content: Text(msg, style: const TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: color,
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
-      )
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    // --- LOGIKA HEADER NAMA (TANPA @GMAIL.COM) ---
     final User? user = FirebaseAuth.instance.currentUser;
     String userDisplayName = "User";
 
     if (user != null) {
-      // Prioritaskan Nama dari Profil Google (Display Name)
       if (user.displayName != null && user.displayName!.isNotEmpty) {
         userDisplayName = user.displayName!;
-      } 
-      // Jika Display Name tidak ada, baru gunakan Email (dipotong @-nya)
-      else if (user.email != null) {
+      } else if (user.email != null) {
         String rawName = user.email!.split('@')[0];
-        // Bonus: Membuat huruf pertama Kapital agar rapi
         userDisplayName = rawName[0].toUpperCase() + rawName.substring(1);
       }
     }
@@ -240,18 +319,32 @@ class HomePage extends StatelessWidget {
                         const CircleAvatar(
                           radius: 18,
                           backgroundColor: Color(0xFFC3A11D),
-                          child: Icon(Icons.person, color: Colors.white, size: 20),
+                          child: Icon(
+                            Icons.person,
+                            color: Colors.white,
+                            size: 20,
+                          ),
                         ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text("Halo,", style: TextStyle(color: Colors.white60, fontSize: 12)),
+                              const Text(
+                                "Halo,",
+                                style: TextStyle(
+                                  color: Colors.white60,
+                                  fontSize: 12,
+                                ),
+                              ),
                               Text(
-                                userDisplayName, 
+                                userDisplayName,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
                               ),
                             ],
                           ),
@@ -261,13 +354,16 @@ class HomePage extends StatelessWidget {
                   ),
                   IconButton(
                     onPressed: () => _handleLogout(context),
-                    icon: const Icon(Icons.logout_rounded, color: Colors.white70),
+                    icon: const Icon(
+                      Icons.logout_rounded,
+                      color: Colors.white70,
+                    ),
                     tooltip: "Logout",
-                  )
+                  ),
                 ],
               ),
             ),
-            
+
             Expanded(
               child: Center(
                 child: SingleChildScrollView(
@@ -277,16 +373,32 @@ class HomePage extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Image.asset(
-                          'images/logo.png', 
-                          height: 90, 
-                          errorBuilder: (c, e, s) => const Icon(Icons.inventory_2, size: 80, color: Color(0xFFC3A11D))
+                          'images/logo.png',
+                          height: 90,
+                          errorBuilder: (c, e, s) => const Icon(
+                            Icons.inventory_2,
+                            size: 80,
+                            color: Color(0xFFC3A11D),
+                          ),
                         ),
                         const SizedBox(height: 15),
-                        const Text("OPNAME SYSTEM", 
-                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 24, letterSpacing: 1.5)
+                        const Text(
+                          "OPNAME SYSTEM",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 24,
+                            letterSpacing: 1.5,
+                          ),
                         ),
-                        const Text("IT-XQUEST MERCHANDISE", 
-                          style: TextStyle(color: Color(0xFFC3A11D), fontWeight: FontWeight.w500, fontSize: 12, letterSpacing: 2)
+                        const Text(
+                          "IT-XQUEST MERCHANDISE",
+                          style: TextStyle(
+                            color: Color(0xFFC3A11D),
+                            fontWeight: FontWeight.w500,
+                            fontSize: 12,
+                            letterSpacing: 2,
+                          ),
                         ),
                         const SizedBox(height: 40),
 
@@ -296,7 +408,12 @@ class HomePage extends StatelessWidget {
                           subtitle: "Cek & perbarui stok barang",
                           icon: Icons.qr_code_scanner_rounded,
                           color: const Color(0xFFC3A11D),
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => const SmartScannerPage())),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (c) => const SmartScannerPage(),
+                            ),
+                          ),
                         ),
 
                         const SizedBox(height: 12),
@@ -307,7 +424,12 @@ class HomePage extends StatelessWidget {
                           subtitle: "Registrasi SKU baru ke database",
                           icon: Icons.add_circle_outline_rounded,
                           color: const Color(0xFF238D9E),
-                          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (c) => const TambahBarangPage())),
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (c) => const TambahBarangPage(),
+                            ),
+                          ),
                         ),
 
                         const SizedBox(height: 12),
@@ -334,11 +456,12 @@ class HomePage extends StatelessWidget {
     );
   }
 
-  Widget _buildMenuButton(BuildContext context, {
-    required String title, 
-    required String subtitle, 
-    required IconData icon, 
-    required Color color, 
+  Widget _buildMenuButton(
+    BuildContext context, {
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    required Color color,
     required VoidCallback onTap,
     bool isOutlined = false,
   }) {
@@ -369,13 +492,30 @@ class HomePage extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 15,
+                      ),
+                    ),
                     const SizedBox(height: 2),
-                    Text(subtitle, style: TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 11)),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.5),
+                        fontSize: 11,
+                      ),
+                    ),
                   ],
                 ),
               ),
-              Icon(Icons.arrow_forward_ios_rounded, color: Colors.white.withOpacity(0.2), size: 14),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                color: Colors.white.withOpacity(0.2),
+                size: 14,
+              ),
             ],
           ),
         ),

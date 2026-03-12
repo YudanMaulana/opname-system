@@ -1,8 +1,8 @@
 const admin = require("firebase-admin");
 const fs = require("fs");
-const { parse } = require("csv-parse"); // Install: npm install csv-parse
+const { parse } = require("csv-parse");
 
-// 1. Inisialisasi Firebase Admin (Gunakan file sertifikat Anda)
+// 1. Inisialisasi Firebase Admin
 const serviceAccount = require("./admin-key.json");
 
 admin.initializeApp({
@@ -13,7 +13,7 @@ const db = admin.firestore();
 
 async function importCsvToFirestore() {
     const results = [];
-    const filePath = "./databse.csv"; // Nama file CSV Anda
+    const filePath = "./database.csv"; 
 
     console.log("Reading CSV file...");
 
@@ -29,26 +29,31 @@ async function importCsvToFirestore() {
             const collectionRef = db.collection("products");
 
             for (const item of results) {
-                const sku = item["KODE SKU"]; // Menyesuaikan header CSV
-                const nama = item["NAMA SKU"];
+                // Menyesuaikan Header Baru: NAME, SKU CODE BARU, SKU CODE LAMA
+                const nama = item["NAME"];
+                const skuBaru = item["SKU CODE BARU"];
+                const skuLama = item["SKU CODE LAMA"];
 
                 // FILTER KEAMANAN: 
-                // Jangan proses jika SKU kosong, null, atau berisi "#N/A"
-                if (!sku || sku === "" || sku === "#N/A" || sku.includes("/")) {
-                    console.log(`⚠️ Melewatkan data tidak valid: SKU=${sku}, Nama=${nama}`);
+                // Abaikan jika NAME kosong atau SKU Baru tidak valid
+                if (!nama || !skuBaru || skuBaru === "" || skuBaru === "#N/A") {
+                    console.log(`⚠️ Melewatkan data tidak valid: Name=${nama}, SKU Baru=${skuBaru}`);
                     continue;
                 }
 
-                const docRef = collectionRef.doc(sku.trim()); // trim() untuk hapus spasi tak terlihat
+                // Kita gunakan SKU CODE BARU sebagai ID Dokumen agar unik
+                const docRef = collectionRef.doc(skuBaru.trim());
 
                 batch.set(docRef, {
-                    sku: sku.trim(),
+                    sku: skuBaru.trim(),
+                    sku_lama: skuLama ? skuLama.trim() : "-", // Jika kosong diisi tanda strip
                     nama: nama.trim(),
                     stok_bawah: 0,
+                    stok_atas: 0,
                     stok_display: 0,
-                    lokasi: "BELUM DISET", // Tambahkan field yang biasanya diminta aplikasi
+                    lokasi: "BELUM DISET",
                     timestamp: admin.firestore.FieldValue.serverTimestamp()
-                });
+                }, { merge: true }); // Menggunakan merge agar tidak menimpa stok yang sudah ada jika re-import
 
                 count++;
 
@@ -60,12 +65,11 @@ async function importCsvToFirestore() {
                 }
             }
 
-            // Commit sisa data yang kurang dari 500
             if (count % 500 !== 0) {
                 await batch.commit();
             }
 
-            console.log(`✅ SELESAI! Total ${count} produk berhasil diimport ke Firestore.`);
+            console.log(`✅ SELESAI! Total ${count} produk X-QUEST berhasil diimport.`);
             process.exit();
         });
 }

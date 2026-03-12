@@ -11,35 +11,50 @@ class SmartScannerPage extends StatefulWidget {
 
 class _SmartScannerPageState extends State<SmartScannerPage> {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
-  final MobileScannerController _controller = MobileScannerController();
+  final MobileScannerController _controller = MobileScannerController(
+    detectionSpeed: DetectionSpeed.noDuplicates,
+    formats: const [
+      BarcodeFormat.code128,
+      BarcodeFormat.code39,
+      BarcodeFormat.code93,
+      BarcodeFormat.codabar,
+      BarcodeFormat.ean13,
+      BarcodeFormat.ean8,
+      BarcodeFormat.upcA,
+      BarcodeFormat.upcE,
+      BarcodeFormat.itf,
+    ],
+    cameraResolution: const Size(1920, 1080),
+  );
+  
   final TextEditingController _qtyEditController = TextEditingController();
-  final TextEditingController _manualSkuController = TextEditingController();
+  final TextEditingController _manualSearchController = TextEditingController();
 
   String? _scannedSku;
   Map<String, dynamic>? _productData;
   String _targetLokasi = 'stok_bawah';
   bool _isSaving = false;
-  bool _isFetching = false; 
+  bool _isFetching = false;
+  bool _isCameraRunning = true;
+  double _zoomFactor = 0.0;
 
   final Color primaryGold = const Color(0xFFC3A11D);
   final Color bgDark = const Color(0xFF3F372F);
 
-  // --- FIX: FETCH DATA DENGAN LOGIKA ANTI-DUPLIKAT ---
+  // --- 1. FETCH PRODUCT DATA ---
   Future<void> _fetchProduct(String code) async {
-    if (_isFetching) return; // Jangan fetch jika proses sebelumnya belum selesai
-    
+    if (_isFetching) return;
+
     setState(() {
       _isFetching = true;
-      _scannedSku = code; 
+      _scannedSku = code;
     });
 
     try {
-      // Pastikan code dibersihkan dari spasi/karakter aneh
       final cleanCode = code.trim().toUpperCase();
       final doc = await _db.collection('products').doc(cleanCode).get();
-      
+
       if (doc.exists) {
-        // PERBAIKAN: Walaupun nilai field 0, doc.exists akan tetap TRUE
         setState(() {
           _productData = doc.data();
           _qtyEditController.clear();
@@ -56,15 +71,10 @@ class _SmartScannerPageState extends State<SmartScannerPage> {
   }
 
   void _handleNotFound(String code) {
-    setState(() {
-      _productData = null;
-    });
-    
-    // BUG FIX: Gunakan clearSnackBars agar pesan tidak menumpuk/muncul terus
+    setState(() => _productData = null);
     ScaffoldMessenger.of(context).clearSnackBars();
     _showSnackBar("SKU $code Tidak Terdaftar!", Colors.orange);
-    
-    // Jeda 2 detik sebelum mengizinkan scan kode yang sama lagi (Anti-Loop)
+
     Future.delayed(const Duration(seconds: 2), () {
       if (mounted && _productData == null) {
         setState(() => _scannedSku = null);
@@ -72,18 +82,28 @@ class _SmartScannerPageState extends State<SmartScannerPage> {
     });
   }
 
-  // --- FIX: TRIGGER ON DETECT DENGAN FILTER ---
+  // --- 2. SCANNER LOGIC ---
   Future<void> _onDetect(BarcodeCapture capture) async {
     final code = capture.barcodes.first.rawValue;
-    // Jika sedang dalam panel detail barang, abaikan scan baru agar tidak tumpang tindih
-    if (_productData != null) return;
+    if (_productData != null || !_isCameraRunning) return;
 
     if (code != null && code != _scannedSku && !_isFetching) {
+      _controller.stop(); 
+      setState(() => _isCameraRunning = false);
       await _fetchProduct(code);
     }
   }
 
-  // --- FIX: PROSES UPDATE DENGAN DEFAULT VALUE ---
+  void _resumeScanning() {
+    setState(() {
+      _productData = null;
+      _scannedSku = null;
+      _isCameraRunning = true;
+    });
+    _controller.start();
+  }
+
+  // --- 3. UPDATE LOGIC (DENGAN SKU LAMA) ---
   Future<void> _processUpdate() async {
     if (_qtyEditController.text.isEmpty) {
       _showSnackBar("Isi jumlah stok baru!", Colors.redAccent);
@@ -91,7 +111,6 @@ class _SmartScannerPageState extends State<SmartScannerPage> {
     }
     setState(() => _isSaving = true);
     try {
-      // PERBAIKAN: Gunakan .toDouble().toInt() atau tryParse untuk menghindari error tipe data
       int oldQty = 0;
       var rawOldQty = _productData![_targetLokasi];
       if (rawOldQty != null) {
@@ -99,14 +118,20 @@ class _SmartScannerPageState extends State<SmartScannerPage> {
       }
 
       int newQty = int.tryParse(_qtyEditController.text) ?? 0;
+      
+      // Mengambil data sku_lama dari document product
+      String skuLama = (_productData!['sku_lama'] ?? "-").toString();
 
+      // Update stok di Master Produk
       await _db.collection('products').doc(_scannedSku).update({
         _targetLokasi: newQty,
         'last_updated': FieldValue.serverTimestamp(),
       });
 
+      // Simpan ke Log History (untuk laporan CSV)
       await _db.collection('logs').add({
         'sku': _scannedSku,
+        'sku_lama': skuLama, // Menyimpan SKU Lama ke log
         'nama': _productData!['nama'] ?? "Tanpa Nama",
         'lokasi': _targetLokasi,
         'qty_lama': oldQty,
@@ -115,12 +140,7 @@ class _SmartScannerPageState extends State<SmartScannerPage> {
       });
 
       _showSnackBar("Stok Berhasil Diperbarui!", Colors.green);
-      
-      // Reset state agar siap scan barang selanjutnya
-      setState(() {
-        _productData = null;
-        _scannedSku = null;
-      });
+      _resumeScanning(); 
     } catch (e) {
       _showSnackBar("Gagal update: $e", Colors.red);
     } finally {
@@ -128,30 +148,38 @@ class _SmartScannerPageState extends State<SmartScannerPage> {
     }
   }
 
+  // --- 4. MANUAL SEARCH MODAL ---
   void _showManualSearch() {
+    _manualSearchController.clear();
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: bgDark,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+      ),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
+            String query = _manualSearchController.text.toUpperCase();
+
             return Container(
               height: MediaQuery.of(context).size.height * 0.85,
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               child: Column(
                 children: [
-                  Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10))),
+                  Container(
+                    width: 40, height: 4,
+                    decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10)),
+                  ),
                   const SizedBox(height: 20),
                   TextField(
-                    controller: _manualSkuController,
+                    controller: _manualSearchController,
                     autofocus: true,
                     style: const TextStyle(color: Colors.white),
-                    textCapitalization: TextCapitalization.characters,
                     decoration: InputDecoration(
                       prefixIcon: Icon(Icons.search, color: primaryGold),
-                      hintText: "Ketik Kode SKU...",
+                      hintText: "Cari Nama atau Kode SKU...",
                       hintStyle: const TextStyle(color: Colors.white24),
                       filled: true,
                       fillColor: Colors.black26,
@@ -161,25 +189,34 @@ class _SmartScannerPageState extends State<SmartScannerPage> {
                   ),
                   const SizedBox(height: 15),
                   Expanded(
-                    child: _manualSkuController.text.isEmpty
-                        ? const Center(child: Text("Masukkan kode produk", style: TextStyle(color: Colors.white24)))
+                    child: query.isEmpty
+                        ? const Center(child: Text("Masukkan pencarian", style: TextStyle(color: Colors.white24)))
                         : StreamBuilder<QuerySnapshot>(
-                            stream: _db.collection('products')
-                                .where(FieldPath.documentId, isGreaterThanOrEqualTo: _manualSkuController.text.toUpperCase())
-                                .where(FieldPath.documentId, isLessThanOrEqualTo: "${_manualSkuController.text.toUpperCase()}\uf8ff")
-                                .limit(10)
-                                .snapshots(),
+                            stream: _db.collection('products').snapshots(),
                             builder: (context, snapshot) {
-                              if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
-                              var results = snapshot.data!.docs;
+                              if (!snapshot.hasData) return Center(child: CircularProgressIndicator(color: primaryGold));
+
+                              var filteredDocs = snapshot.data!.docs.where((doc) {
+                                String sku = doc.id.toUpperCase();
+                                String skuLama = (doc['sku_lama'] ?? "").toString().toUpperCase();
+                                String nama = (doc['nama'] ?? "").toString().toUpperCase();
+                                return sku.contains(query) || nama.contains(query) || skuLama.contains(query);
+                              }).toList();
+
+                              if (filteredDocs.isEmpty) {
+                                return const Center(child: Text("Produk tidak ditemukan", style: TextStyle(color: Colors.white24)));
+                              }
+
                               return ListView.builder(
-                                itemCount: results.length,
+                                itemCount: filteredDocs.length,
                                 itemBuilder: (context, index) {
-                                  var data = results[index].data() as Map<String, dynamic>;
-                                  var docId = results[index].id;
+                                  var data = filteredDocs[index].data() as Map<String, dynamic>;
+                                  var docId = filteredDocs[index].id;
                                   return ListTile(
-                                    title: Text(docId, style: TextStyle(color: primaryGold, fontWeight: FontWeight.bold)),
-                                    subtitle: Text(data['nama'] ?? "-", style: const TextStyle(color: Colors.white70)),
+                                    contentPadding: const EdgeInsets.symmetric(vertical: 5),
+                                    title: Text(data['nama'] ?? "Tanpa Nama", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                                    subtitle: Text("SKU: $docId | Lama: ${data['sku_lama'] ?? '-'}", style: TextStyle(color: primaryGold)),
+                                    trailing: const Icon(Icons.chevron_right, color: Colors.white24),
                                     onTap: () {
                                       Navigator.pop(context);
                                       _fetchProduct(docId);
@@ -222,7 +259,31 @@ class _SmartScannerPageState extends State<SmartScannerPage> {
                 MobileScanner(controller: _controller, onDetect: _onDetect),
                 Container(
                   width: 200, height: 200,
-                  decoration: BoxDecoration(border: Border.all(color: primaryGold, width: 2), borderRadius: BorderRadius.circular(20)),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: primaryGold, width: 2),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                Positioned(
+                  bottom: 10, left: 20, right: 20,
+                  child: Row(
+                    children: [
+                      const Icon(Icons.zoom_out, color: Colors.white),
+                      Expanded(
+                        child: Slider(
+                          value: _zoomFactor,
+                          min: 0.0, max: 1.0,
+                          activeColor: primaryGold,
+                          inactiveColor: Colors.white24,
+                          onChanged: (value) {
+                            setState(() => _zoomFactor = value);
+                            _controller.setZoomScale(value);
+                          },
+                        ),
+                      ),
+                      const Icon(Icons.zoom_in, color: Colors.white),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -232,14 +293,23 @@ class _SmartScannerPageState extends State<SmartScannerPage> {
             child: Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-              decoration: BoxDecoration(color: bgDark, borderRadius: const BorderRadius.vertical(top: Radius.circular(35))),
-              child: _productData == null 
-                ? _buildEmptyState()
-                : SingleChildScrollView(child: _buildDetailPanel()),
+              decoration: BoxDecoration(
+                color: bgDark,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(35)),
+              ),
+              child: _productData == null ? _buildEmptyState() : SingleChildScrollView(child: _buildDetailPanel()),
             ),
           ),
         ],
       ),
+      floatingActionButton: !_isCameraRunning
+          ? FloatingActionButton.extended(
+              onPressed: _resumeScanning,
+              backgroundColor: primaryGold,
+              icon: const Icon(Icons.qr_code_scanner, color: Colors.black),
+              label: const Text("SCAN ULANG", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            )
+          : null,
     );
   }
 
@@ -254,9 +324,9 @@ class _SmartScannerPageState extends State<SmartScannerPage> {
         OutlinedButton.icon(
           onPressed: _showManualSearch,
           icon: Icon(Icons.search, color: primaryGold),
-          label: Text("CARI SKU MANUAL", style: TextStyle(color: primaryGold)),
+          label: Text("CARI NAMA / SKU MANUAL", style: TextStyle(color: primaryGold)),
           style: OutlinedButton.styleFrom(side: BorderSide(color: primaryGold.withOpacity(0.3))),
-        )
+        ),
       ],
     );
   }
@@ -272,15 +342,25 @@ class _SmartScannerPageState extends State<SmartScannerPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(_productData!['nama']?.toString().toUpperCase() ?? "TANPA NAMA", 
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+                  Text(
+                    _productData!['nama']?.toString().toUpperCase() ?? "TANPA NAMA",
+                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
                   const SizedBox(height: 4),
-                  Text("SKU: $_scannedSku", style: TextStyle(color: primaryGold, fontWeight: FontWeight.w600)),
+                  Row(
+                    children: [
+                      Text("SKU: $_scannedSku", style: TextStyle(color: primaryGold, fontWeight: FontWeight.w600)),
+                      const SizedBox(width: 8),
+                      Text(
+                        "(${_productData!['sku_lama'] ?? '-'})", 
+                        style: const TextStyle(color: Colors.white38, fontSize: 12),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
-            IconButton(onPressed: () => setState(() { _productData = null; _scannedSku = null; }), 
-              icon: const Icon(Icons.close, color: Colors.white38))
+            IconButton(onPressed: _resumeScanning, icon: const Icon(Icons.close, color: Colors.white38)),
           ],
         ),
         const SizedBox(height: 20),
@@ -316,7 +396,8 @@ class _SmartScannerPageState extends State<SmartScannerPage> {
           decoration: InputDecoration(
             hintText: "Masukkan stok baru",
             hintStyle: const TextStyle(color: Colors.white10),
-            filled: true, fillColor: Colors.black26,
+            filled: true,
+            fillColor: Colors.black26,
             enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
             focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: primaryGold)),
           ),
@@ -326,8 +407,13 @@ class _SmartScannerPageState extends State<SmartScannerPage> {
           width: double.infinity, height: 55,
           child: ElevatedButton(
             onPressed: _isSaving ? null : _processUpdate,
-            style: ElevatedButton.styleFrom(backgroundColor: primaryGold, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
-            child: _isSaving ? const CircularProgressIndicator(color: Colors.black) : const Text("SIMPAN PERUBAHAN", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: primaryGold,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+            ),
+            child: _isSaving
+                ? const CircularProgressIndicator(color: Colors.black)
+                : const Text("SIMPAN PERUBAHAN", style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
           ),
         ),
       ],
@@ -341,40 +427,40 @@ class _SmartScannerPageState extends State<SmartScannerPage> {
         onTap: () => setState(() => _targetLokasi = value),
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 12),
-          decoration: BoxDecoration(color: isSelected ? primaryGold : Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(10)),
-          child: Center(child: Text(title, style: TextStyle(color: isSelected ? Colors.black : Colors.white60, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal))),
+          decoration: BoxDecoration(
+            color: isSelected ? primaryGold : Colors.white.withOpacity(0.05),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Center(
+            child: Text(title, style: TextStyle(color: isSelected ? Colors.black : Colors.white60, fontWeight: isSelected ? FontWeight.bold : FontWeight.normal)),
+          ),
         ),
       ),
     );
   }
 
   Widget _stokInfo(String label, dynamic val) {
-    // FIX: Ambil nilai num lalu ubah ke int untuk keamanan tampilan
     int displayVal = 0;
-    if (val != null) {
-      displayVal = (val is int) ? val : (val as num).toInt();
-    }
-    
-    return Column(children: [
-      Text(label, style: const TextStyle(color: Colors.white38, fontSize: 9)), 
-      const SizedBox(height: 4), 
-      Text("$displayVal", style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold))
-    ]);
+    if (val != null) displayVal = (val is int) ? val : (val as num).toInt();
+    return Column(
+      children: [
+        Text(label, style: const TextStyle(color: Colors.white38, fontSize: 9)),
+        const SizedBox(height: 4),
+        Text("$displayVal", style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+      ],
+    );
   }
 
   void _showSnackBar(String msg, Color color) {
-    ScaffoldMessenger.of(context).clearSnackBars(); 
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg), 
-      backgroundColor: color, 
-      behavior: SnackBarBehavior.floating,
-      duration: const Duration(seconds: 2),
-    ));
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: color, behavior: SnackBarBehavior.floating, duration: const Duration(seconds: 2)),
+    );
   }
 
   @override
   void dispose() {
-    _manualSkuController.dispose();
+    _manualSearchController.dispose();
     _qtyEditController.dispose();
     _controller.dispose();
     super.dispose();
